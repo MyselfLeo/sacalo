@@ -94,7 +94,7 @@ impl Huffman {
 
 /// Represents a Huffman tree, used to store and access bytes based on their number of occurences
 /// in the file.
-#[derive(PartialEq, Eq, Ord)]
+#[derive(Eq, Ord)]
 pub enum HuffmanTree {
     Node(u128, Option<Rc<RefCell<HuffmanTree>>>, bool, Rc<RefCell<HuffmanTree>>, Rc<RefCell<HuffmanTree>>), // weight, ref to parent, left or right, left branch, right branch
     Leaf(u128, Option<Rc<RefCell<HuffmanTree>>>, bool, u8)                                                  // weight, ref to parent, left or right, data byte
@@ -225,5 +225,12 @@ impl HuffmanTree {
 impl PartialOrd for HuffmanTree {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         other.get_weight().partial_cmp(&self.get_weight())
+    }
+}
+
+
+impl PartialEq for HuffmanTree {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_weight() == other.get_weight()
     }
 }
