@@ -24,5 +24,5 @@ fn main() {
     let huffman = Huffman::from_data(&file_data).unwrap();
 
     println!("Data stored: {:?}", huffman.get_all_bytes());
-    println!("{:?}", huffman.get_path(101));
+    println!("{:?}", huffman.get_path(106));
 }

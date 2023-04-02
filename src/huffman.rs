@@ -52,13 +52,13 @@ impl Huffman {
 
 
             let new_weight = node_1.borrow().get_weight() + node_2.borrow().get_weight();
-            let new_node = Rc::new(RefCell::new(HuffmanTree::Node(new_weight, None, false, Rc::clone(&node_1), Rc::clone(&node_2))));
+            let new_node = Rc::new(RefCell::new(HuffmanTree::Node(new_weight, None, false, Rc::downgrade(&node_1), Rc::downgrade(&node_2))));
 
 
             // update children
             match node_1.try_borrow_mut() {
                 Ok(mut borrow) => {
-                    (*borrow).set_parent(Some(Rc::downgrade(&new_node)), true)
+                    (*borrow).set_parent(Some(Rc::clone(&new_node)), true)
                 },
                 Err(_) => panic!(),
             }
@@ -66,7 +66,7 @@ impl Huffman {
 
             match node_2.try_borrow_mut() {
                 Ok(mut borrow) => {
-                    (*borrow).set_parent(Some(Rc::downgrade(&new_node)), false)
+                    (*borrow).set_parent(Some(Rc::clone(&new_node)), false)
                 },
                 Err(_) => panic!(),
             }
@@ -95,17 +95,18 @@ impl Huffman {
 
     /// return the path to the given data
     pub fn get_path(&self, data: u8) -> Option<Vec<bool>> {
-        let leaf_id = match self.leaves.binary_search_by(|v| v.borrow().get_data().unwrap().cmp(&data)) {
-            Ok(i) => i,
-            Err(_) => return None,
-        };
+        let mut leaf_id = -1;
+        for (i, b) in self.get_all_bytes().iter().enumerate() {
+            if *b == data {leaf_id = i as isize; break}
+        }
+        if leaf_id == -1 {return None}
 
-        let mut node = self.leaves[leaf_id].clone();
+        let mut node = self.leaves[leaf_id as usize].clone();
 
         let mut res = vec![];
         while node.borrow().get_parent().is_some() {
             res.push(node.borrow().get_left_right());
-            let parent = node.borrow().get_parent().unwrap().upgrade().unwrap();
+            let parent = node.borrow().get_parent().unwrap();
             node = parent;
         }
 
@@ -132,8 +133,8 @@ impl Huffman {
 /// in the file.
 #[derive(Debug)]
 pub enum HuffmanTree {
-    Node(u128, Option<Weak<RefCell<HuffmanTree>>>, bool, Rc<RefCell<HuffmanTree>>, Rc<RefCell<HuffmanTree>>), // weight, ref to parent, left or right, left branch, right branch
-    Leaf(u128, Option<Weak<RefCell<HuffmanTree>>>, bool, u8)                                                  // weight, ref to parent, left or right, data byte
+    Node(u128, Option<Rc<RefCell<HuffmanTree>>>, bool, Weak<RefCell<HuffmanTree>>, Weak<RefCell<HuffmanTree>>), // weight, ref to parent, left or right, left branch, right branch
+    Leaf(u128, Option<Rc<RefCell<HuffmanTree>>>, bool, u8)                                                      // weight, ref to parent, left or right, data byte
 }
 
 
@@ -155,8 +156,8 @@ impl HuffmanTree {
             },
 
             HuffmanTree::Node(weight, _, _, left_branch, right_branch) => {
-                let left_bytes = left_branch.borrow().serialise();
-                let right_bytes = right_branch.borrow().serialise();
+                let left_bytes = left_branch.upgrade().unwrap().borrow().serialise();
+                let right_bytes = right_branch.upgrade().unwrap().borrow().serialise();
 
                 let mut res = BytesMut::with_capacity(18 + left_bytes.len() + right_bytes.len());
 
@@ -207,19 +208,19 @@ impl HuffmanTree {
             let right = HuffmanTree::deserialise(right_branch)?;
 
 
-            let new = Rc::new(RefCell::new(HuffmanTree::Node(weight, None, false, left.clone(), right.clone())));
+            let new = Rc::new(RefCell::new(HuffmanTree::Node(weight, None, false, Rc::downgrade(&left), Rc::downgrade(&right))));
 
 
             // update children
             match left.try_borrow_mut() {
                 Ok(mut borrow) => {
-                    (*borrow).set_parent(Some(Rc::downgrade(&new)), true)
+                    (*borrow).set_parent(Some(Rc::clone(&new)), true)
                 },
                 Err(_) => panic!(),
             }
             match right.try_borrow_mut() {
                 Ok(mut borrow) => {
-                    (*borrow).set_parent(Some(Rc::downgrade(&new)), false)
+                    (*borrow).set_parent(Some(Rc::clone(&new)), false)
                 },
                 Err(_) => panic!(),
             }
@@ -241,7 +242,7 @@ impl HuffmanTree {
     }
 
 
-    pub fn get_parent(&self) -> Option<Weak<RefCell<HuffmanTree>>> {
+    pub fn get_parent(&self) -> Option<Rc<RefCell<HuffmanTree>>> {
         match self {
             HuffmanTree::Node(_, p, _, _, _) => p.clone(),
             HuffmanTree::Leaf(_, p, _, _) => p.clone(),
@@ -257,7 +258,7 @@ impl HuffmanTree {
     }
 
 
-    pub fn set_parent(&mut self, parent: Option<Weak<RefCell<HuffmanTree>>>, left_right: bool) {
+    pub fn set_parent(&mut self, parent: Option<Rc<RefCell<HuffmanTree>>>, left_right: bool) {
         match self {
             HuffmanTree::Node(_, p, lr, _, _) => {
                 *p = parent;
