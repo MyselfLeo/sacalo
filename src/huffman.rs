@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use bytes::{BytesMut, BufMut, Bytes, Buf};
 
@@ -52,13 +52,13 @@ impl Huffman {
 
 
             let new_weight = node_1.borrow().get_weight() + node_2.borrow().get_weight();
-            let new_node = Rc::new(RefCell::new(HuffmanTree::Node(new_weight, None, false, node_1.clone(), node_2.clone())));
+            let new_node = Rc::new(RefCell::new(HuffmanTree::Node(new_weight, None, false, Rc::clone(&node_1), Rc::clone(&node_2))));
 
 
             // update children
             match node_1.try_borrow_mut() {
                 Ok(mut borrow) => {
-                    (*borrow).set_parent(Some(new_node.clone()), true)
+                    (*borrow).set_parent(Some(Rc::downgrade(&new_node)), true)
                 },
                 Err(_) => panic!(),
             }
@@ -66,7 +66,7 @@ impl Huffman {
 
             match node_2.try_borrow_mut() {
                 Ok(mut borrow) => {
-                    (*borrow).set_parent(Some(new_node.clone()), false)
+                    (*borrow).set_parent(Some(Rc::downgrade(&new_node)), false)
                 },
                 Err(_) => panic!(),
             }
@@ -75,8 +75,10 @@ impl Huffman {
 
             // insert back at the correct position of the vector
             match nodes.binary_search(&new_node) {
-                Ok(_) => {unreachable!()}
-                Err(pos) => {nodes.insert(pos, new_node);}
+                Ok(_) => {}
+                Err(pos) => {
+                    nodes.insert(pos, new_node);
+                }
             }
         }
 
@@ -87,6 +89,40 @@ impl Huffman {
             leaves,
         })
     }
+
+
+
+
+    /// return the path to the given data
+    pub fn get_path(&self, data: u8) -> Option<Vec<bool>> {
+        let leaf_id = match self.leaves.binary_search_by(|v| v.borrow().get_data().unwrap().cmp(&data)) {
+            Ok(i) => i,
+            Err(_) => return None,
+        };
+
+        let mut node = self.leaves[leaf_id].clone();
+
+        let mut res = vec![];
+        while node.borrow().get_parent().is_some() {
+            res.push(node.borrow().get_left_right());
+            let parent = node.borrow().get_parent().unwrap().upgrade().unwrap();
+            node = parent;
+        }
+
+        Some(res)
+    }
+
+
+    /// Return the list of all bytes present in the tree
+    pub fn get_all_bytes(&self) -> Vec<u8> {
+        let mut res = vec![];
+
+        for l in &self.leaves {
+            res.push(l.borrow().get_data().unwrap())
+        }
+
+        res
+    }
 }
 
 
@@ -94,10 +130,10 @@ impl Huffman {
 
 /// Represents a Huffman tree, used to store and access bytes based on their number of occurences
 /// in the file.
-#[derive(Eq, Ord)]
+#[derive(Debug)]
 pub enum HuffmanTree {
-    Node(u128, Option<Rc<RefCell<HuffmanTree>>>, bool, Rc<RefCell<HuffmanTree>>, Rc<RefCell<HuffmanTree>>), // weight, ref to parent, left or right, left branch, right branch
-    Leaf(u128, Option<Rc<RefCell<HuffmanTree>>>, bool, u8)                                                  // weight, ref to parent, left or right, data byte
+    Node(u128, Option<Weak<RefCell<HuffmanTree>>>, bool, Rc<RefCell<HuffmanTree>>, Rc<RefCell<HuffmanTree>>), // weight, ref to parent, left or right, left branch, right branch
+    Leaf(u128, Option<Weak<RefCell<HuffmanTree>>>, bool, u8)                                                  // weight, ref to parent, left or right, data byte
 }
 
 
@@ -177,13 +213,13 @@ impl HuffmanTree {
             // update children
             match left.try_borrow_mut() {
                 Ok(mut borrow) => {
-                    (*borrow).set_parent(Some(new.clone()), true)
+                    (*borrow).set_parent(Some(Rc::downgrade(&new)), true)
                 },
                 Err(_) => panic!(),
             }
             match right.try_borrow_mut() {
                 Ok(mut borrow) => {
-                    (*borrow).set_parent(Some(new.clone()), false)
+                    (*borrow).set_parent(Some(Rc::downgrade(&new)), false)
                 },
                 Err(_) => panic!(),
             }
@@ -205,7 +241,23 @@ impl HuffmanTree {
     }
 
 
-    pub fn set_parent(&mut self, parent: Option<Rc<RefCell<HuffmanTree>>>, left_right: bool) {
+    pub fn get_parent(&self) -> Option<Weak<RefCell<HuffmanTree>>> {
+        match self {
+            HuffmanTree::Node(_, p, _, _, _) => p.clone(),
+            HuffmanTree::Leaf(_, p, _, _) => p.clone(),
+        }
+    }
+
+
+    pub fn get_left_right(&self) -> bool {
+        match self {
+            HuffmanTree::Node(_, _, lr, _, _) => *lr,
+            HuffmanTree::Leaf(_, _, lr, _) => *lr,
+        }
+    }
+
+
+    pub fn set_parent(&mut self, parent: Option<Weak<RefCell<HuffmanTree>>>, left_right: bool) {
         match self {
             HuffmanTree::Node(_, p, lr, _, _) => {
                 *p = parent;
@@ -215,6 +267,14 @@ impl HuffmanTree {
                 *p = parent;
                 *lr = left_right;
             },
+        }
+    }
+
+
+    pub fn get_data(&self) -> Option<u8> {
+        match self {
+            HuffmanTree::Node(_, _, _, _, _) => None,
+            HuffmanTree::Leaf(_, _, _, d) => Some(*d),
         }
     }
 
@@ -228,9 +288,17 @@ impl PartialOrd for HuffmanTree {
     }
 }
 
+impl Ord for HuffmanTree {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        other.get_weight().cmp(&self.get_weight())
+    }
+}
+
 
 impl PartialEq for HuffmanTree {
     fn eq(&self, other: &Self) -> bool {
         self.get_weight() == other.get_weight()
     }
 }
+
+impl Eq for HuffmanTree {}
