@@ -111,7 +111,7 @@ impl Huffman {
 
 
     /// return the path to the given data
-    fn get_path(&self, data: u8) -> Option<Vec<bool>> {
+    pub fn get_path(&self, data: u8) -> Option<Vec<bool>> {
         let mut leaf_id = -1;
         for (i, b) in self.get_all_bytes().iter().enumerate() {
             if *b == data {leaf_id = i as isize; break}
@@ -132,7 +132,7 @@ impl Huffman {
 
 
     /// Return the list of all bytes present in the tree
-    fn get_all_bytes(&self) -> Vec<u8> {
+    pub fn get_all_bytes(&self) -> Vec<u8> {
         let mut res = vec![];
 
         for l in &self.leaves {
@@ -145,7 +145,7 @@ impl Huffman {
 
 
     /// Return the bytes representing the given data
-    fn encode(&self, data: &Bytes) -> Option<Bytes> {
+    pub fn encode(&self, data: &Bytes) -> Option<Bytes> {
         let mut res = BytesMut::new();
 
         // encode each bytes
@@ -245,6 +245,32 @@ impl Huffman {
         }
         
         return Some(res.freeze())
+    }
+
+
+
+    pub fn get_data_from_path(&self, path: Vec<bool>) -> Result<u8, String> {
+        // now, we decompress the data. We iter throught each bit until we meet a leaf
+        let mut current_node = self.tree.clone();
+
+        for (i, branch) in path.iter().enumerate() {
+            let new_node;
+
+            match &*current_node.borrow() {
+                HuffmanTree::Node(_, _, _, cl, cr) => {
+                    new_node = if *branch {cl.clone()} else {cr.clone()}
+                },
+                
+                HuffmanTree::Leaf(_, _, _, d) => {
+                    if i == path.len() - 1 {return Ok(*d)}
+                    else {return Err("Path continues after a leaf".to_string())}
+                },
+            }
+
+            current_node = new_node;
+        }
+
+        Err("Path doesn't end at a leaf".to_string())
     }
 }
 
