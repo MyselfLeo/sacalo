@@ -87,9 +87,31 @@ impl Huffman {
 
 
 
+    fn from_tree(tree: Rc<RefCell<HuffmanTree>>) -> Huffman {
+        let mut leaves = vec![];
+        let mut buf = vec![tree.clone()];
+
+        while !buf.is_empty() {
+            let parent = buf.pop().unwrap();
+            let parent_deref = &*parent.borrow();
+            
+            match parent_deref {
+                HuffmanTree::Node(_, _, _, lc, rc) => {
+                    buf.push(lc.clone());
+                    buf.push(rc.clone());
+                },
+                HuffmanTree::Leaf(_, _, _, _) => leaves.push(parent.clone()),
+            }
+        }
+
+        Huffman { tree: tree.clone(), leaves: leaves }
+    }
+
+
+
 
     /// return the path to the given data
-    pub fn get_path(&self, data: u8) -> Option<Vec<bool>> {
+    fn get_path(&self, data: u8) -> Option<Vec<bool>> {
         let mut leaf_id = -1;
         for (i, b) in self.get_all_bytes().iter().enumerate() {
             if *b == data {leaf_id = i as isize; break}
@@ -110,7 +132,7 @@ impl Huffman {
 
 
     /// Return the list of all bytes present in the tree
-    pub fn get_all_bytes(&self) -> Vec<u8> {
+    fn get_all_bytes(&self) -> Vec<u8> {
         let mut res = vec![];
 
         for l in &self.leaves {
@@ -123,8 +145,7 @@ impl Huffman {
 
 
     /// Return the bytes representing the given data
-    pub fn encode(data: &Bytes) -> Option<Bytes> {
-        let tree = Huffman::from_data(data)?;
+    fn encode(&self, data: &Bytes) -> Option<Bytes> {
         let mut res = BytesMut::new();
 
         // encode each bytes
@@ -132,7 +153,7 @@ impl Huffman {
         let mut nb_bits_written = 0;
         for  b in data {
 
-            for left in tree.get_path(*b)? {
+            for left in self.get_path(*b)? {
                 // byte is filled, we push it to the result BytesMut
                 if nb_bits_written == 8 {
                     res.put_u8(byte);
@@ -151,6 +172,46 @@ impl Huffman {
 
 
         Some(res.freeze())
+    }
+
+
+
+    /// Compress the data
+    pub fn compress(data: &Bytes) -> Option<Bytes> {
+        let mut res = BytesMut::new();
+        
+        let tree = Huffman::from_data(data)?;
+        let tree_rep = tree.tree.borrow().serialise();
+        let encoded_data = tree.encode(data)?;
+
+        res.extend_from_slice(&tree_rep);
+        res.extend_from_slice(&encoded_data);
+
+        Some(res.freeze())
+    }
+
+
+    /// Decompress the data
+    pub fn decompress(data: &Bytes) -> Option<Bytes> {
+        let mut data = data.clone();
+
+        // retrieve the huffman tree
+        let tree_data_length = data.get_u16();
+        
+        let mut tree_data = BytesMut::new();
+        tree_data.put_u16(tree_data_length);
+        tree_data.extend_from_slice(&data.slice(0..tree_data_length as usize));
+
+        let mut compressed_data = BytesMut::new();
+        compressed_data.extend_from_slice(&data.slice(tree_data_length as usize..data.len()));
+
+        let tree = HuffmanTree::deserialise(tree_data.freeze()).unwrap();
+
+
+        // todo: decompress the data
+        
+
+        todo!()
     }
 }
 
