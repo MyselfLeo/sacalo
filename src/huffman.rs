@@ -5,6 +5,9 @@ use bytes::{BytesMut, BufMut, Bytes, Buf};
 
 
 
+const IDENTIFIER: &[u8; 6] = b"SACALO";
+
+
 
 /// Structure storing a [HuffmanTree] and allowing retrieval of the path from the root to a particular leaf
 pub struct Huffman {
@@ -181,17 +184,26 @@ impl Huffman {
 
 
     /// Compress the data
-    pub fn compress(data: &Bytes) -> Option<Bytes> {
+    pub fn compress(data: &Bytes) -> Result<Bytes, String> {
         let mut res = BytesMut::new();
+
+        // file format identifier
+        res.extend_from_slice(IDENTIFIER);
         
-        let tree = Huffman::from_data(data)?;
+        let tree = match Huffman::from_data(data) {
+            Some(v) => v,
+            None => return Err("Unable to generate a tree from the data".to_string())
+        };
         let tree_rep = tree.tree.borrow().serialise();
-        let encoded_data = tree.encode(data)?;
+        let encoded_data = match tree.encode(data) {
+            Some(v) => v,
+            None => return Err("Unable to generate compressed data".to_string())
+        };
 
         res.extend_from_slice(&tree_rep);
         res.extend_from_slice(&encoded_data);
 
-        Some(res.freeze())
+        Ok(res.freeze())
     }
 
 
@@ -227,8 +239,15 @@ impl Huffman {
 
 
     /// Decompress the data
-    pub fn decompress(data: &Bytes) -> Option<Bytes> {
+    pub fn decompress(data: &Bytes) -> Result<Bytes, String> {
         let mut data = data.clone();
+
+        // retrieve format identifier
+        for b in IDENTIFIER {
+            if data.get_u8() != *b {
+                return Err("The given file was not compressed using Sacalo".to_string())
+            }
+        }
 
         // retrieve the huffman tree
         let tree_data_weight = data.get_u128();
@@ -273,7 +292,7 @@ impl Huffman {
         }
 
         
-        return Some(res.freeze())
+        return Ok(res.freeze())
     }
 
 
@@ -460,7 +479,7 @@ impl HuffmanTree {
 
 
 
-
+    /*
     pub fn print_hierarchy(&self, depth: u8) {
         let mut tabs = String::new();
         for _ in 0..depth {tabs.push_str("  ")}
@@ -473,7 +492,7 @@ impl HuffmanTree {
             },
             HuffmanTree::Leaf(w, _, _, d) => println!("{tabs} ({w}) {d}"),
         }
-    }
+    } */
 
 }
 

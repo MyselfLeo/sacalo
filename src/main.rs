@@ -64,20 +64,20 @@ fn main() {
     };
 
     let result = match (result, &op) {
-        (None, Operation::Compress) => {
-            println!("\x1b[31m[ERROR] Error while compressing {}\x1b[0m", input);
+        (Err(e), Operation::Compress) => {
+            println!("\x1b[31m[ERROR] {e} {input}\x1b[0m");
             std::process::exit(1);
         },
-        (None, Operation::Decompress) => {
-            println!("\x1b[31m[ERROR] Unable to decompress {}. Was the file corrupted?\x1b[0m", input);
+        (Err(e), Operation::Decompress) => {
+            println!("\x1b[31m[ERROR] Unable to decompress {input}: {e}\x1b[0m");
             std::process::exit(1);
         },
-        (Some(r), ..) => r
+        (Ok(r), ..) => r
     };
 
 
-    // write the resulting file to an output
-    let output_name = match (output, op) {
+    // determinate output name
+    let output_name = match (output, &op) {
         (Some(n), _) => n,
         (None, Operation::Compress) => format!("{input}.scl"),
         (None, Operation::Decompress) => {
@@ -89,12 +89,23 @@ fn main() {
     };
 
 
-
-    match fs::write(&output_name, result) {
+    // write the resulting file to an output
+    match fs::write(&output_name, &result) {
         Ok(_) => (),
         Err(_) => {
             println!("\x1b[31m[ERROR] Unable to write to {}\x1b[0m", output_name);
             std::process::exit(1);
         },
+    }
+
+
+    // warn user if the compression was not worth it
+    match &op {
+        Operation::Compress => {
+            if data.len() < result.len() {
+                println!("[NOTE] The compressed file is larger than the source file due to its original size (not worth compression using Sacalo)");
+            }
+        },
+        _ => ()
     }
 }
