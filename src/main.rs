@@ -1,14 +1,38 @@
 use std::fs;
 
 
-mod huffman;
 use bytes::Bytes;
-use huffman::{Huffman, HuffmanTree};
+use clap::{Subcommand, Parser};
+
+mod huffman;
+use huffman::Huffman;
 
 
-const FILE_NAME: &str = "test2";
+enum Operation {
+    Compress,
+    Decompress
+}
 
 
+
+/// Shitty Algorithm for Compressing Admittedly Large Objects (Sacalo)
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands
+}
+
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Compresses a file
+    Compress {file: String, output: Option<String>},
+
+    /// Decompresses a file
+    Decompress {file: String, output: Option<String>}
+}
 
 
 
@@ -17,23 +41,60 @@ const FILE_NAME: &str = "test2";
 
 
 fn main() {
-    let file_data = Bytes::from(fs::read(format!("{FILE_NAME}.txt")).unwrap());
-    let res = Huffman::compress(&file_data).unwrap();
-    fs::write(format!("{FILE_NAME}.txt.cpr"), res).unwrap();
+    let cli = Cli::parse();
 
-    let compressed_data = Bytes::from(fs::read(format!("{FILE_NAME}.txt.cpr")).unwrap());
-    let (decompression, resulting_tree) = Huffman::decompress(&compressed_data);
-    let decompression = decompression.unwrap();
+    let (op, input, output) = match cli.command {
+        Commands::Compress { file, output } => (Operation::Compress, file, output),
+        Commands::Decompress { file, output } => (Operation::Decompress, file, output),
+    };
 
-    fs::write(format!("{FILE_NAME}.result.txt"), decompression).unwrap();
+    // load data from file
+    let data = match fs::read(&input) {
+        Ok(d) => Bytes::from(d),
+        Err(_) => {
+            println!("\x1b[31m[ERROR] Unable to load file {}\x1b[0m", input);
+            std::process::exit(1)
+        },
+    };
 
-    let expected_treetree = Huffman::from_data(&Bytes::from(file_data.clone())).unwrap();
+    // compress or decompress depending on the operation
+    let result = match &op {
+        Operation::Compress => Huffman::compress(&data),
+        Operation::Decompress => Huffman::decompress(&data),
+    };
 
-    println!("\n\n");
-    println!("Expected:");
-    expected_treetree.tree.borrow().print_hierarchy(0);
-    println!("\n\n");
-    println!("Got:");
-    resulting_tree.borrow().print_hierarchy(0);
-    println!("\n\n");
+    let result = match (result, &op) {
+        (None, Operation::Compress) => {
+            println!("\x1b[31m[ERROR] Error while compressing {}\x1b[0m", input);
+            std::process::exit(1);
+        },
+        (None, Operation::Decompress) => {
+            println!("\x1b[31m[ERROR] Unable to decompress {}. Was the file corrupted?\x1b[0m", input);
+            std::process::exit(1);
+        },
+        (Some(r), ..) => r
+    };
+
+
+    // write the resulting file to an output
+    let output_name = match (output, op) {
+        (Some(n), _) => n,
+        (None, Operation::Compress) => format!("{input}.scl"),
+        (None, Operation::Decompress) => {
+            match input.strip_suffix(".scl") {
+                Some(n) => n.to_string(),
+                None => format!("{input}_decompressed"),
+            }
+        }
+    };
+
+
+
+    match fs::write(&output_name, result) {
+        Ok(_) => (),
+        Err(_) => {
+            println!("\x1b[31m[ERROR] Unable to write to {}\x1b[0m", output_name);
+            std::process::exit(1);
+        },
+    }
 }

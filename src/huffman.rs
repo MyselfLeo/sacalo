@@ -88,6 +88,7 @@ impl Huffman {
 
 
 
+    /*
     fn from_tree(tree: Rc<RefCell<HuffmanTree>>) -> Huffman {
         let mut leaves = vec![];
         let mut buf = vec![tree.clone()];
@@ -106,7 +107,7 @@ impl Huffman {
         }
 
         Huffman { tree: tree.clone(), leaves: leaves }
-    }
+    } */
 
 
 
@@ -155,7 +156,9 @@ impl Huffman {
         let mut nb_bits_written = 0;
         for  b in data {
 
-            for left in self.get_path(*b)? {
+            let path = self.get_path(*b)?;
+
+            for left in path {
                 // byte is filled, we push it to the result BytesMut
                 if nb_bits_written == 8 {
                     res.put_u8(byte);
@@ -171,7 +174,6 @@ impl Huffman {
             }
         }
         if nb_bits_written > 0 {res.put_u8(byte)}
-
 
         Some(res.freeze())
     }
@@ -193,7 +195,7 @@ impl Huffman {
     }
 
 
-
+    /*
     /// Returns the byte represented by the given path
     pub fn get_byte_from_path(&self, path: &Vec<bool>) -> Result<u8, String> {
         let mut current_node = self.tree.clone();
@@ -218,22 +220,19 @@ impl Huffman {
                 return Err("Path does not end at a leaf".to_string())
             }
         }
-    }
+    } */
 
 
 
 
 
     /// Decompress the data
-    pub fn decompress(data: &Bytes) -> (Option<Bytes>, Rc<RefCell<HuffmanTree>>) {
+    pub fn decompress(data: &Bytes) -> Option<Bytes> {
         let mut data = data.clone();
 
         // retrieve the huffman tree
         let tree_data_weight = data.get_u128();
         let tree_data_length = data.get_u16();
-
-        println!("tree weight: {tree_data_weight}");
-        println!("tree length: {tree_data_length}");
         
         let mut tree_data = BytesMut::new();
         tree_data.put_u128(tree_data_weight);
@@ -245,23 +244,25 @@ impl Huffman {
 
         let tree = HuffmanTree::deserialise(tree_data.freeze()).unwrap();
 
-
-
         // now, we decompress the data. We iter throught each bit until we meet a leaf
         let mut current_node = tree.clone();
+        let mut path = Vec::new();
         let mut res = BytesMut::new();
 
         for b in compressed_data {
-            for i in 0..8 {
-
+            let mut i = 0;
+            while i < 8 {
                 let new_node;
                 match &*current_node.borrow() {
                     HuffmanTree::Node(_, _, _, cl, cr) => {
                         let bit = (b & 1 << i) == (1 << i);
+                        path.push(bit);
+                        i += 1;
                         new_node = if bit {cl.clone()} else {cr.clone()}
                     },
                     
                     HuffmanTree::Leaf(_, _, _, d) => {
+                        path.clear();
                         res.put_u8(*d);
                         new_node = tree.clone();
                     },
@@ -270,12 +271,14 @@ impl Huffman {
                 current_node = new_node;
             }
         }
+
         
-        return (Some(res.freeze()), tree.clone())
+        return Some(res.freeze())
     }
 
 
-
+    
+    /*
     pub fn get_data_from_path(&self, path: Vec<bool>) -> Result<u8, String> {
         // now, we decompress the data. We iter throught each bit until we meet a leaf
         let mut current_node = self.tree.clone();
@@ -298,7 +301,7 @@ impl Huffman {
         }
 
         Err("Path doesn't end at a leaf".to_string())
-    }
+    } */
 }
 
 
