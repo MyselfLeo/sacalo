@@ -6,7 +6,7 @@ use bytes::Bytes;
 use huffman::{Huffman, HuffmanTree};
 
 
-
+const FILE_NAME: &str = "test2";
 
 
 
@@ -17,24 +17,23 @@ use huffman::{Huffman, HuffmanTree};
 
 
 fn main() {
-    /*let file_data = Bytes::from(fs::read("example2.txt").unwrap());
+    let file_data = Bytes::from(fs::read(format!("{FILE_NAME}.txt")).unwrap());
     let res = Huffman::compress(&file_data).unwrap();
-    fs::write("example2.txt.cpr", res).unwrap();
+    fs::write(format!("{FILE_NAME}.txt.cpr"), res).unwrap();
 
-    let compressed_data = Bytes::from(fs::read("example2.txt.cpr").unwrap());
-    let decompression = Huffman::decompress(&compressed_data).unwrap();
-    fs::write("result.txt", decompression).unwrap();*/
-    let bytes = vec![1, 34, 64, 124, 255, 1, 1];
-    let tree = Huffman::from_data(&Bytes::from(bytes.clone())).unwrap();
-    println!("registered bytes: {:?}", tree.get_all_bytes());
+    let compressed_data = Bytes::from(fs::read(format!("{FILE_NAME}.txt.cpr")).unwrap());
+    let (decompression, resulting_tree) = Huffman::decompress(&compressed_data);
+    let decompression = decompression.unwrap();
 
-    for b in bytes {
-        println!("Current byte: {b}");
-        let path = tree.get_path(b).unwrap();
-        println!("\tPath: {:?}", path);
-        let data = tree.get_data_from_path(path).unwrap();
-        println!("\t resulting data: {data}");
-    }
+    fs::write(format!("{FILE_NAME}.result.txt"), decompression).unwrap();
 
+    let expected_treetree = Huffman::from_data(&Bytes::from(file_data.clone())).unwrap();
 
+    println!("\n\n");
+    println!("Expected:");
+    expected_treetree.tree.borrow().print_hierarchy(0);
+    println!("\n\n");
+    println!("Got:");
+    resulting_tree.borrow().print_hierarchy(0);
+    println!("\n\n");
 }

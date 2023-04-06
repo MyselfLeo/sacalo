@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use bytes::{BytesMut, BufMut, Bytes, Buf};
@@ -112,17 +113,18 @@ impl Huffman {
 
     /// return the path to the given data
     pub fn get_path(&self, data: u8) -> Option<Vec<bool>> {
+
+        // query the leaf corresponding to the given data
         let mut leaf_id = -1;
         for (i, b) in self.get_all_bytes().iter().enumerate() {
             if *b == data {leaf_id = i as isize; break}
         }
         if leaf_id == -1 {return None}
-
         let mut node = self.leaves[leaf_id as usize].clone();
 
         let mut res = vec![];
         while node.borrow().get_parent().is_some() {
-            res.push(node.borrow().get_left_right());
+            res.insert(0, node.borrow().get_left_right());
             let parent = node.borrow().get_parent().unwrap();
             node = parent.upgrade().unwrap();
         }
@@ -187,37 +189,62 @@ impl Huffman {
         res.extend_from_slice(&tree_rep);
         res.extend_from_slice(&encoded_data);
 
-        println!("compressed data length: {}", res.len());
-
         Some(res.freeze())
     }
 
 
+
+    /// Returns the byte represented by the given path
+    pub fn get_byte_from_path(&self, path: &Vec<bool>) -> Result<u8, String> {
+        let mut current_node = self.tree.clone();
+
+        for p in path {
+            let next_node = match &*current_node.borrow() {
+                HuffmanTree::Leaf(..) => return Err("Path continues after a leaf".to_string()),
+                HuffmanTree::Node(_, _, _, l, r) => {
+                    if *p {l.clone()}
+                    else {r.clone()}
+                }
+            };
+
+            current_node = next_node;
+        }
+
+        let end_node = &*current_node.borrow();
+
+        match end_node {
+            HuffmanTree::Leaf(_, _, _, b) => return Ok(*b),
+            HuffmanTree::Node(..) => {
+                return Err("Path does not end at a leaf".to_string())
+            }
+        }
+    }
+
+
+
+
+
     /// Decompress the data
-    pub fn decompress(data: &Bytes) -> Option<Bytes> {
+    pub fn decompress(data: &Bytes) -> (Option<Bytes>, Rc<RefCell<HuffmanTree>>) {
         let mut data = data.clone();
 
         // retrieve the huffman tree
         let tree_data_weight = data.get_u128();
         let tree_data_length = data.get_u16();
-        println!("tree data length: {tree_data_length}");
-        println!("data length: {}", data.len());
+
+        println!("tree weight: {tree_data_weight}");
+        println!("tree length: {tree_data_length}");
         
         let mut tree_data = BytesMut::new();
         tree_data.put_u128(tree_data_weight);
         tree_data.put_u16(tree_data_length);
-        println!("1");
         tree_data.extend_from_slice(&data.slice(0..tree_data_length as usize));
 
         let mut compressed_data = BytesMut::new();
-        println!("2");
         compressed_data.extend_from_slice(&data.slice(tree_data_length as usize..data.len()));
-
-        println!("3");
 
         let tree = HuffmanTree::deserialise(tree_data.freeze()).unwrap();
 
-        println!("4");
 
 
         // now, we decompress the data. We iter throught each bit until we meet a leaf
@@ -244,7 +271,7 @@ impl Huffman {
             }
         }
         
-        return Some(res.freeze())
+        return (Some(res.freeze()), tree.clone())
     }
 
 
@@ -329,14 +356,12 @@ impl HuffmanTree {
     pub fn deserialise(mut bytes: Bytes) -> Result<Rc<RefCell<HuffmanTree>>, String> {
         // first 2 bytes are the size of the tree branch. If bytes.len() != 2 + size, the
         // bytes are not valid
-        println!("a");
         let bytes_len = bytes.len();
 
         let weight = bytes.get_u128();
         let size = bytes.get_u16();
         if bytes_len != (size + 18) as usize {return Err(format!("Invalid bytes size (expected {}, got {})", size, bytes_len))}
 
-        println!("b");
         // case of a leaf
         if size == 1 {
             Ok(Rc::new(RefCell::new(HuffmanTree::Leaf(weight, None, false, bytes.get_u8()))))
@@ -350,13 +375,10 @@ impl HuffmanTree {
             let mut left_branch = BytesMut::with_capacity(18 + left_size as usize);
             left_branch.put_u128(left_weight);
             left_branch.put_u16(left_size);
-            println!("5");
             left_branch.extend_from_slice(bytes.slice(0..(left_size as usize)).as_ref());
 
-            println!("6");
             let right_branch = bytes.slice((left_size as usize)..bytes.len());
 
-            println!("7");
 
             let left = HuffmanTree::deserialise(left_branch.freeze())?;
             let right = HuffmanTree::deserialise(right_branch)?;
@@ -430,6 +452,23 @@ impl HuffmanTree {
         match self {
             HuffmanTree::Node(_, _, _, _, _) => None,
             HuffmanTree::Leaf(_, _, _, d) => Some(*d),
+        }
+    }
+
+
+
+
+    pub fn print_hierarchy(&self, depth: u8) {
+        let mut tabs = String::new();
+        for _ in 0..depth {tabs.push_str("  ")}
+
+        match self {
+            HuffmanTree::Node(w, _, _, lc, rc) => {
+                println!("{tabs} ({w})");
+                lc.borrow().print_hierarchy(depth+1);
+                rc.borrow().print_hierarchy(depth+1);
+            },
+            HuffmanTree::Leaf(w, _, _, d) => println!("{tabs} ({w}) {d}"),
         }
     }
 
