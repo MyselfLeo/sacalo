@@ -102,6 +102,7 @@ fn main() {
     // warn user if the compression was not worth it
     match &op {
         Operation::Compress => {
+            println!("[NOTE] Compressed file {input} by {:.2}%", (1.0 - (result.len() as f64 / data.len() as f64)) * 100.0);
             if data.len() < result.len() {
                 println!("[NOTE] The compressed file is larger than the source file due to its original size (not worth compression using Sacalo)");
             }
