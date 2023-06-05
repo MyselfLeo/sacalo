@@ -1,4 +1,4 @@
-# Shitty Algorithm for Compressing Admittedly Large Objects (Sacalo)
+# Crappy Algorithm for Compressing Admittedly Large Objects (Sacalo)
 
 Believe it or not, it kinda works for large files. The file `example.txt`, for _example_, get compressed by a whooping **_46%!!_**
 

@@ -1,12 +1,12 @@
 [package]
 name = "sacalo"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 authors = ["MyselfLeo"]
 readme = "README.md"
 repository = "https://github.com/MyselfLeo/sacalo"
 license = "MPL-2.0"
-description = "Shitty algorithm for compressing admittedly large objects"
+description = "Crappy algorithm for compressing admittedly large objects"
 
 [dependencies]
 bytes = "1.4.0"
